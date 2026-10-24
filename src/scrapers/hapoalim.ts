@@ -287,11 +287,20 @@ class HapoalimScraper extends BaseScraperWithBrowser<ScraperSpecificCredentials>
   }
 
   getLoginOptions(credentials: ScraperSpecificCredentials) {
+    // No password => interactive mode: skip auto-fill/submit and let the user log in manually
+    // (e.g. with a visible browser to complete OTP), then wait for the post-login redirect.
+    const isInteractive = !credentials.password;
+
     return {
       loginUrl: `${this.baseUrl}/cgi-bin/poalwwwc?reqName=getLogonPage`,
-      fields: createLoginFields(credentials),
-      submitButtonSelector: '.login-btn',
-      postAction: async () => waitForRedirect(this.page),
+      fields: isInteractive ? [] : createLoginFields(credentials),
+      submitButtonSelector: isInteractive ? async () => {} : '.login-btn',
+      postAction: async () => {
+        // Use the scraper timeout (OTP / manual login can take far longer than the 20s default).
+        // `timeout` is a browser-launch option that callers using an external browser may still pass.
+        const { timeout } = this.options as { timeout?: number };
+        await waitForRedirect(this.page, timeout || this.options.defaultTimeout || 120000);
+      },
       possibleResults: getPossibleLoginResults(this.baseUrl),
     };
   }
